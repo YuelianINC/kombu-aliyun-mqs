@@ -2,7 +2,7 @@
 
 import types
 
-from aliyun_mqs.mqs_exception import *
+from mqs_exception import *
 
 
 METHODS = ["PUT", "POST", "GET", "DELETE"]

@@ -2,7 +2,7 @@
 
 from httplib import HTTPConnection
 
-from aliyun_mqs.mqs_exception import *
+from mqs_exception import *
 from mqs_tool import DataTypeConversion
 
 

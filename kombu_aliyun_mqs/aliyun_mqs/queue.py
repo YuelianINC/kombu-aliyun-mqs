@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from aliyun_mqs.mqs_request import *
+from mqs_request import *
 
 
 class Queue:

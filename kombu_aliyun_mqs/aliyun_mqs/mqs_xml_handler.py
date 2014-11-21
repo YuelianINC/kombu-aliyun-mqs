@@ -3,7 +3,7 @@
 import xml.dom.minidom
 import base64
 
-from aliyun_mqs.mqs_exception import *
+from mqs_exception import *
 
 
 def create_child_element(doc, parent, name):

@@ -4,7 +4,7 @@ import time
 import hashlib
 import hmac
 
-from  aliyun_mqs.mqs_xml_handler import *
+from mqs_xml_handler import *
 from mqs_tool import *
 from mqs_http import *
 

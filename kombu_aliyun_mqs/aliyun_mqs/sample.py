@@ -4,7 +4,7 @@
 import sys
 
 from account import Account
-from aliyun_mqs.queue import *
+from queue import *
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ from kombu.transport.virtual import scheduling
 from kombu.log import get_logger
 from kombu.utils import cached_property
 from kombu.utils.encoding import bytes_to_str, safe_str
-from kombu.utils.json import loads, dumps
+from json import loads, dumps
 
 from aliyun_mqs.mqs_client import MQSClient
 from aliyun_mqs.queue import *
