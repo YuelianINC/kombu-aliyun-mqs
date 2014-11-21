@@ -321,3 +321,24 @@ class Channel(virtual.Channel):
     def wait_time_seconds(self):
         return self.transport_options.get('wait_time_seconds',
                                           self.default_wait_time_seconds)
+import socket
+class Transport(virtual.Transport):
+    Channel = Channel
+
+    polling_interval = 1
+    wait_time_seconds = 0
+    default_port = None
+    connection_errors = (
+        virtual.Transport.connection_errors +
+        (socket.error)
+    )
+    channel_errors = (
+        virtual.Transport.channel_errors
+    )
+    driver_type = 'mqs'
+    driver_name = 'mqs'
+
+    implements = virtual.Transport.implements.extend(
+        async=True,
+        exchange_type=frozenset(['direct']),
+    )
