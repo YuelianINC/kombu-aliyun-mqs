@@ -330,7 +330,7 @@ class Transport(virtual.Transport):
     default_port = None
     connection_errors = (
         virtual.Transport.connection_errors +
-        (socket.error)
+        (socket.error,)
     )
     channel_errors = (
         virtual.Transport.channel_errors
