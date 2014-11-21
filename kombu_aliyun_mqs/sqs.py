@@ -417,8 +417,8 @@ class Transport(virtual.Transport):
     channel_errors = (
         virtual.Transport.channel_errors + (exception.SQSDecodeError, )
     )
-    driver_type = 'sqs'
-    driver_name = 'sqs'
+    driver_type = 'mqs'
+    driver_name = 'mqs'
 
     implements = virtual.Transport.implements.extend(
         async=True,

@@ -17,6 +17,7 @@ from kombu.utils.json import loads, dumps
 
 from aliyun_mqs.mqs_client import MQSClient
 from aliyun_mqs.queue import *
+from aliyun_mqs.mqs_request import *
 
 logger = get_logger(__name__)
 
