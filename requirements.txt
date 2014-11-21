@@ -1,0 +1,4 @@
+celery
+boto
+git+https://github.com/YuelianINC/kombu
+git+https://github.com/celery/py-amqp
