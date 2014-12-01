@@ -23,10 +23,10 @@ logger = get_logger(__name__)
 
 # dots are replaced by dash, all other punctuation
 # replaced by underscore.
-CHARS_REPLACE_TABLE = {
-    ord(c): 0x5f for c in string.punctuation if c not in '-_.'
-}
-CHARS_REPLACE_TABLE[0x2e] = 0x2d  # '.' -> '-'
+# CHARS_REPLACE_TABLE = {
+#     ord(c): 0x5f for c in string.punctuation if c not in '-_.'
+# }
+# CHARS_REPLACE_TABLE[0x2e] = 0x2d  # '.' -> '-'
 
 #: SQS bulk get supports a maximum of 10 messages at a time.
 MQS_MAX_MESSAGES = 10
@@ -57,7 +57,7 @@ class Channel(virtual.Channel):
         queues = [url.split('/')[-1] for url in queueurl_list]
         queuemeta_list = resp.queuemeta_list
         for queue in queues:
-            self._queue_cache[queue.name] = Queue(queue, self.mqs_client)
+            self._queue_cache[queue] = Queue(queue, self.mqs_client)
 
         # The drain_events() method stores extra messages in a local
         # Deque object. This allows multiple messages to be requested from
@@ -106,12 +106,12 @@ class Channel(virtual.Channel):
           limit).
         """
         self._cycle = scheduling.FairCycle(
-            self._get_bulk, self._active_queues, Empty,
+            self._get, self._active_queues, Empty,
         )
 
-    def entity_name(self, name, table=CHARS_REPLACE_TABLE):
-        """Format AMQP queue name into a legal SQS queue name."""
-        return text_t(safe_str(name)).translate(table)
+    # def entity_name(self, name, table=CHARS_REPLACE_TABLE):
+    #     """Format AMQP queue name into a legal SQS queue name."""
+    #     return text_t(safe_str(name)).translate(table)
 
     def _new_queue(self, queue, **kwargs):
         """Ensure a queue with given name exists in SQS."""
@@ -119,7 +119,7 @@ class Channel(virtual.Channel):
             return queue
         # Translate to SQS name for consistency with initial
         # _queue_cache population.
-        queue = self.entity_name(self.queue_name_prefix + queue)
+        queue = self.queue_name_prefix + queue
         try:
             return self._queue_cache[queue]
         except KeyError:
@@ -139,7 +139,7 @@ class Channel(virtual.Channel):
         q = self._new_queue(queue)
         m = Message()
         m.message_body = (dumps(message))
-        q.write(m)
+        q.send_message(m)
 
     def _loop1(self, queue, _=None):
         self.hub.call_soon(self._schedule_queue, queue)
@@ -147,8 +147,8 @@ class Channel(virtual.Channel):
     def _schedule_queue(self, queue):
         if queue in self._active_queues:
             if self.qos.can_consume():
-                self._get_bulk_async(
-                    queue, callback=promise(self._loop1, (queue, )),
+                self._get_async(
+                    queue,
                 )
             else:
                 self._loop1(queue)
@@ -159,7 +159,7 @@ class Channel(virtual.Channel):
             queue.delete_message(message.receipt_handle)
         else:
             payload['properties']['delivery_info'].update({
-                'sqs_message': message, 'sqs_queue': queue,
+                'mqs_message': message, 'mqs_queue': queue,
             })
         return payload
 
@@ -175,58 +175,15 @@ class Channel(virtual.Channel):
         q = self._new_queue(queue)
         return [self._message_to_python(m, queue, q) for m in messages]
 
-    def _get_bulk(self, queue,
-                  max_if_unlimited=MQS_MAX_MESSAGES, callback=None):
-        """Try to retrieve multiple messages off ``queue``.
-        Where :meth:`_get` returns a single Payload object, this method
-        returns a list of Payload objects.  The number of objects returned
-        is determined by the total number of messages available in the queue
-        and the number of messages the QoS object allows (based on the
-        prefetch_count).
-        .. note::
-            Ignores QoS limits so caller is responsible for checking
-            that we are allowed to consume at least one message from the
-            queue.  get_bulk will then ask QoS for an estimate of
-            the number of extra messages that we can consume.
-        :param queue: The queue name to pull from.
-        :returns list: of message objects.
-        """
-        # drain_events calls `can_consume` first, consuming
-        # a token, so we know that we are allowed to consume at least
-        # one message.
-        maxcount = self._get_message_estimate()
-        if maxcount:
-            q = self._new_queue(queue)
-            messages = q.get_messages(num_messages=maxcount)
-
-            if messages:
-                return self._messages_to_python(messages, queue)
-        raise Empty()
 
     def _get(self, queue):
         """Try to retrieve a single message off ``queue``."""
         q = self._new_queue(queue)
-        messages = q.get_messages(num_messages=1)
+        messages = q.receive_message()
         if messages:
             return self._messages_to_python(messages, queue)[0]
         raise Empty()
 
-    def _get_bulk_async(self, queue, max_if_unlimited=MQS_MAX_MESSAGES, callback=None):
-        maxcount = self._get_message_estimate()
-        if maxcount:
-            return self._get_async(queue, maxcount, callback=callback)
-        # Not allowed to consume, make sure to notify callback..
-        callback = ensure_promise(callback)
-        callback([])
-        return callback
-
-    def _get_message_estimate(self, max_if_unlimited=MQS_MAX_MESSAGES):
-        maxcount = self.qos.can_consume_max_estimate()
-        return min(
-            max_if_unlimited if maxcount is None else max(maxcount, 1),
-            max_if_unlimited,
-        )
-#to do
     def _get_async(self, queue, count=1, callback=None):
         q = self._new_queue(queue)
         return self._get_from_mqs(
@@ -264,16 +221,16 @@ class Channel(virtual.Channel):
     def basic_ack(self, delivery_tag):
         delivery_info = self.qos.get(delivery_tag).delivery_info
         try:
-            queue = delivery_info['sqs_queue']
+            queue = delivery_info['mqs_queue']
         except KeyError:
             pass
         else:
-            queue.delete_message(delivery_info['sqs_message'])
+            queue.delete_message(delivery_info['mqs_message'])
         super(Channel, self).basic_ack(delivery_tag)
 
     def _size(self, queue):
         """Return the number of messages in a queue."""
-        return self._new_queue(queue).count()
+        return self._new_queue(queue).get_attributes().active_messages
 
     def _purge(self, queue):
         """Delete all current messages in a queue."""
@@ -338,7 +295,7 @@ class Transport(virtual.Transport):
     driver_type = 'mqs'
     driver_name = 'mqs'
 
-    implements = virtual.Transport.implements.extend(
-        async=True,
-        exchange_type=frozenset(['direct']),
-    )
+    # implements = virtual.Transport.implements.extend(
+    #     async=True,
+    #     exchange_type=frozenset(['direct']),
+    # )

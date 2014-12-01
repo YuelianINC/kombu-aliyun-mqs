@@ -3,6 +3,7 @@
 import time
 import hashlib
 import hmac
+import string
 
 from mqs_xml_handler import *
 from mqs_tool import *
