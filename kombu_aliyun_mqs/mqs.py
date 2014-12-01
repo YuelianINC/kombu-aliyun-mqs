@@ -59,19 +59,16 @@ class Channel(virtual.Channel):
         for queue in queues:
             self._queue_cache[queue] = Queue(queue, self.mqs_client)
 
+        self._fanout_queues = set()
         # The drain_events() method stores extra messages in a local
         # Deque object. This allows multiple messages to be requested from
         # SQS at once for performance, but maintains the same external API
         # to the caller of the drain_events() method.
         self._queue_message_cache = collections.deque()
 
-        self.hub = kwargs.get('hub') or get_event_loop()
-
     def basic_consume(self, queue, no_ack, *args, **kwargs):
         if no_ack:
             self._noack_queues.add(queue)
-        if self.hub:
-            self._loop1(queue)
         return super(Channel, self).basic_consume(
             queue, no_ack, *args, **kwargs
         )
@@ -97,6 +94,15 @@ class Channel(virtual.Channel):
             return message_cache.popleft()
         except IndexError:
             pass
+
+        res, queue = self._poll(self.cycle, timeout=timeout)
+        message_cache.extend((r, queue) for r in res)
+
+        # Now try to pop off the queue again.
+        try:
+            return message_cache.popleft()
+        except IndexError:
+            raise Empty()
 
     def _reset_cycle(self):
         """Reset the consume cycle.
@@ -126,8 +132,9 @@ class Channel(virtual.Channel):
             the_queue = Queue(queue, self.mqs_client)
             queue_meta = QueueMeta()
             queue_meta.set_visibilitytimeout(self.visibility_timeout)
-            q = self._queue_cache[queue] = the_queue.create(queue_meta)
-            return q
+            the_queue.create(queue_meta)
+            self._queue_cache[queue] = the_queue
+            return the_queue
 
     def _delete(self, queue, *args):
         """delete queue by name."""
@@ -141,20 +148,20 @@ class Channel(virtual.Channel):
         m.message_body = (dumps(message))
         q.send_message(m)
 
-    def _loop1(self, queue, _=None):
-        self.hub.call_soon(self._schedule_queue, queue)
-
-    def _schedule_queue(self, queue):
-        if queue in self._active_queues:
-            if self.qos.can_consume():
-                self._get_async(
-                    queue,
-                )
-            else:
-                self._loop1(queue)
+    # def _loop1(self, queue, _=None):
+    #     self.hub.call_soon(self._schedule_queue, queue)
+    #
+    # def _schedule_queue(self, queue):
+    #     if queue in self._active_queues:
+    #         if self.qos.can_consume():
+    #             self._get_async(
+    #                 queue,
+    #             )
+    #         else:
+    #             self._loop1(queue)
 
     def _message_to_python(self, message, queue_name, queue):
-        payload = loads(bytes_to_str(message.get_body()))
+        payload = loads(message.get_body())
         if queue_name in self._noack_queues:
             queue.delete_message(message.receipt_handle)
         else:
@@ -179,9 +186,9 @@ class Channel(virtual.Channel):
     def _get(self, queue):
         """Try to retrieve a single message off ``queue``."""
         q = self._new_queue(queue)
-        messages = q.receive_message()
-        if messages:
-            return self._messages_to_python(messages, queue)[0]
+        message = q.receive_message()
+        if message:
+            return self._message_to_python(message, queue, q)
         raise Empty()
 
     def _get_async(self, queue, count=1, callback=None):
@@ -296,6 +303,6 @@ class Transport(virtual.Transport):
     driver_name = 'mqs'
 
     # implements = virtual.Transport.implements.extend(
-    #     async=True,
+    #     async=False,
     #     exchange_type=frozenset(['direct']),
     # )
