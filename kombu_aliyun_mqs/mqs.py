@@ -159,7 +159,7 @@ class Channel(virtual.Channel):
             queue.delete_message(message.receipt_handle)
         else:
             payload['properties']['delivery_info'].update({
-                'sqs_message': message, 'sqs_queue': queue,
+                'mqs_message': message, 'mqs_queue': queue,
             })
         return payload
 
@@ -221,11 +221,11 @@ class Channel(virtual.Channel):
     def basic_ack(self, delivery_tag):
         delivery_info = self.qos.get(delivery_tag).delivery_info
         try:
-            queue = delivery_info['sqs_queue']
+            queue = delivery_info['mqs_queue']
         except KeyError:
             pass
         else:
-            queue.delete_message(delivery_info['sqs_message'])
+            queue.delete_message(delivery_info['mqs_message'])
         super(Channel, self).basic_ack(delivery_tag)
 
     def _size(self, queue):
